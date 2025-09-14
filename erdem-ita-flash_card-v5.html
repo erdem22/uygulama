@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<title>İtalyanca Flash Kart – İlerleme Kayıtlı</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { --accent:#007bff; }
+  body { font-family: Arial, sans-serif; margin: 32px; color:#222; }
+  h1 { text-align:center; margin-bottom: 10px; }
+  .box { max-width: 900px; margin: 0 auto; border:1px solid #ddd; border-radius:12px; padding:24px; box-shadow: 0 4px 16px rgba(0,0,0,.04); }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  label { font-weight:bold; }
+  input[type="text"] { padding:10px 12px; border:1px solid #ccc; border-radius:8px; min-width: 220px; }
+  button { padding:10px 16px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; }
+  button.primary { background: var(--accent); color:#fff; border-color: var(--accent); }
+  button:disabled { opacity:.6; cursor:not-allowed; }
+  #game { margin-top: 18px; display:none; }
+  #card { font-size: 2.2rem; text-align:center; margin:24px 0 6px; min-height: 2.4rem; }
+  #translation { text-align:center; font-size: 1.1rem; color:#a40000; min-height: 1.2em; }
+  #topControls { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap: 8px; }
+  #controls { display:flex; justify-content:center; gap: 10px; margin: 14px 0; flex-wrap:wrap; }
+  #results, #summary { margin-top: 18px; }
+  table { width:100%; border-collapse:collapse; margin-top:12px; }
+  th, td { border:1px solid #ddd; padding:8px; text-align:left; }
+  th { background:#f7f7f7; }
+  .muted { color:#666; }
+  .right { text-align:right; }
+  .ok { color:#0a7a2f; }
+  .bad { color:#b00020; }
+  .tag { font-size:.9rem; padding:4px 8px; border-radius:16px; background:#eef8f0; color:#0a7a2f; border:1px solid #cfe8d6; }
+  .tag.bad { background:#fdeeee; color:#b00020; border-color:#f5caca; }
+  h3,h4 { margin-top: 20px; }
+</style>
+</head>
+<body>
+  <h1>🇮🇹 İtalyanca Flash Kart</h1>
+  <div class="box">
+
+    <!-- Giriş / Kullanıcı oluşturma -->
+    <div id="login">
+      <p><strong>Başlamak için bir kullanıcı adı oluştur:</strong></p>
+      <div class="row">
+        <label for="username">Kullanıcı adı</label>
+        <input id="username" type="text" placeholder="ör. erdem_1" />
+        <button class="primary" id="startBtn">Başlat</button>
+      </div>
+      <p id="loginMsg" class="muted"></p>
+      <div class="space"></div>
+      <details>
+        <summary>Mevcut kullanıcıyı seç</summary>
+        <div class="row" style="margin-top:8px;">
+          <select id="userSelect"></select>
+          <button id="useSelected">Bu kullanıcıyla devam et</button>
+        </div>
+        <p class="muted">Not: Kaydı olan kullanıcı adları listelenir.</p>
+      </details>
+    </div>
+
+    <!-- Oyun Alanı -->
+    <div id="game">
+      <div id="topControls">
+        <div class="row" style="gap:8px;">
+          <div>👤 <strong id="currentUser"></strong></div>
+          <button id="exportBtn">Verileri Dışa Aktar (JSON)</button>
+          <button id="importBtn">İçe Aktar (JSON)</button>
+          <input type="file" id="importFile" accept="application/json" style="display:none;" />
+        </div>
+        <div class="row">
+          <button id="newSetBtn">Yeni 10'luk Set</button>
+          <button id="showSummaryBtn" class="primary">Başarım</button>
+        </div>
+      </div>
+
+      <div class="row" style="justify-content:space-between;">
+        <div>
+          <button id="prevBtn" title="Önceki Kelime" style="display:none;">⬅️ Önceki Kelime</button>
+        </div>
+        <div id="progress" class="muted">Soru: <span id="qIdx">0</span>/10</div>
+      </div>
+
+      <div id="card">—</div>
+      <div id="translation"></div>
+
+      <div id="controls">
+        <button id="speakBtn">🔊 Oku</button>
+        <button id="rememberBtn" class="primary">✅ Hatırladım</button>
+        <button id="notRememberBtn">❌ Hatırlamadım</button>
+        <button id="nextBtn" style="display:none;">➡️ Sonraki Kelime</button>
+      </div>
+
+      <div id="results"></div>
+      <div id="summary"></div>
+    </div>
+
+  </div>
+
+<script>
+/** ============== 1) Kelime Havuzu: 100 Temel Kelime ============== */
+const WORDS = [
+  {it:"Ciao", tr:"Merhaba / Hoşça kal"},
+  {it:"Buongiorno", tr:"Günaydın / İyi günler"},
+  {it:"Buonasera", tr:"İyi akşamlar"},
+  {it:"Arrivederci", tr:"Hoşça kalın / Görüşmek üzere"},
+  {it:"Per favore", tr:"Lütfen"},
+  {it:"Grazie", tr:"Teşekkürler"},
+  {it:"Prego", tr:"Rica ederim"},
+  {it:"Mi scusi", tr:"Affedersiniz"},
+  {it:"Sì", tr:"Evet"},
+  {it:"No", tr:"Hayır"},
+  {it:"Uomo", tr:"Adam"},
+  {it:"Donna", tr:"Kadın"},
+  {it:"Bambino", tr:"Çocuk (erkek)"},
+  {it:"Bambina", tr:"Çocuk (kız)"},
+  {it:"Amico", tr:"Arkadaş (erkek)"},
+  {it:"Amica", tr:"Arkadaş (kadın)"},
+  {it:"Signore", tr:"Bay"},
+  {it:"Signora", tr:"Bayan"},
+  {it:"Turista", tr:"Turist"},
+  {it:"Persona", tr:"Kişi"},
+  {it:"Acqua", tr:"Su"},
+  {it:"Vino", tr:"Şarap"},
+  {it:"Birra", tr:"Bira"},
+  {it:"Pane", tr:"Ekmek"},
+  {it:"Pizza", tr:"Pizza"},
+  {it:"Pasta", tr:"Makarna"},
+  {it:"Caffè", tr:"Kahve"},
+  {it:"Latte", tr:"Süt"},
+  {it:"Zucchero", tr:"Şeker"},
+  {it:"Sale", tr:"Tuz"},
+  {it:"Destra", tr:"Sağ"},
+  {it:"Sinistra", tr:"Sol"},
+  {it:"Dritto", tr:"Düz"},
+  {it:"Qui", tr:"Burada"},
+  {it:"Lì", tr:"Orada"},
+  {it:"Vicino", tr:"Yakın"},
+  {it:"Lontano", tr:"Uzak"},
+  {it:"Aeroporto", tr:"Havaalanı"},
+  {it:"Stazione", tr:"Tren istasyonu"},
+  {it:"Fermata", tr:"Durak"},
+  {it:"Taxi", tr:"Taksi"},
+  {it:"Autobus", tr:"Otobüs"},
+  {it:"Treno", tr:"Tren"},
+  {it:"Biglietto", tr:"Bilet"},
+  {it:"Mappa", tr:"Harita"},
+  {it:"Strada", tr:"Yol"},
+  {it:"Piazza", tr:"Meydan"},
+  {it:"Albergo", tr:"Otel"},
+  {it:"Camera", tr:"Oda"},
+  {it:"Bagno", tr:"Tuvalet / Banyo"},
+  {it:"Negozio", tr:"Dükkan"},
+  {it:"Supermercato", tr:"Süpermarket"},
+  {it:"Prezzo", tr:"Fiyat"},
+  {it:"Denaro", tr:"Para"},
+  {it:"Carta", tr:"Kart"},
+  {it:"Sconto", tr:"İndirim"},
+  {it:"Aperto", tr:"Açık"},
+  {it:"Chiuso", tr:"Kapalı"},
+  {it:"Mercato", tr:"Pazar (alışveriş yeri)"},
+  {it:"Prodotto", tr:"Ürün"},
+  {it:"Telefono", tr:"Telefon"},
+  {it:"Internet", tr:"İnternet"},
+  {it:"Ospedale", tr:"Hastane"},
+  {it:"Farmacia", tr:"Eczane"},
+  {it:"Polizia", tr:"Polis"},
+  {it:"Aiuto", tr:"Yardım"},
+  {it:"Passaporto", tr:"Pasaport"},
+  {it:"Indirizzo", tr:"Adres"},
+  {it:"Nome", tr:"İsim"},
+  {it:"Firma", tr:"İmza"},
+  {it:"Uno", tr:"Bir"},
+  {it:"Due", tr:"İki"},
+  {it:"Tre", tr:"Üç"},
+  {it:"Quattro", tr:"Dört"},
+  {it:"Cinque", tr:"Beş"},
+  {it:"Sei", tr:"Altı"},
+  {it:"Sette", tr:"Yedi"},
+  {it:"Otto", tr:"Sekiz"},
+  {it:"Nove", tr:"Dokuz"},
+  {it:"Dieci", tr:"On"},
+  {it:"Oggi", tr:"Bugün"},
+  {it:"Domani", tr:"Yarın"},
+  {it:"Ieri", tr:"Dün"},
+  {it:"Ora", tr:"Saat / Şimdi"},
+  {it:"Minuto", tr:"Dakika"},
+  {it:"Giorno", tr:"Gün"},
+  {it:"Notte", tr:"Gece"},
+  {it:"Mattina", tr:"Sabah"},
+  {it:"Pomeriggio", tr:"Öğleden sonra"},
+  {it:"Settimana", tr:"Hafta"},
+  {it:"Bene", tr:"İyi"},
+  {it:"Male", tr:"Kötü"},
+  {it:"Caldo", tr:"Sıcak"},
+  {it:"Freddo", tr:"Soğuk"},
+  {it:"Grande", tr:"Büyük"},
+  {it:"Piccolo", tr:"Küçük"},
+  {it:"Nuovo", tr:"Yeni"},
+  {it:"Vecchio", tr:"Eski"},
+  {it:"Bello", tr:"Güzel"},
+  {it:"Brutto", tr:"Çirkin"},
+];
+
+/** ============== 2) localStorage Yardımcıları ============== */
+const USERS_KEY = "italianFlashUsers";
+function getUsers(){ try { return JSON.parse(localStorage.getItem(USERS_KEY)) || []; } catch { return []; } }
+function saveUsers(users){ localStorage.setItem(USERS_KEY, JSON.stringify(users)); }
+function statsKey(username){ return `italianFlashStats:${username}`; }
+function getStats(username){ try { return JSON.parse(localStorage.getItem(statsKey(username))) || {}; } catch { return {}; } }
+function saveStats(username, stats){ localStorage.setItem(statsKey(username), JSON.stringify(stats)); }
+
+/** ============== 3) Durum ============== */
+let currentUser = null;
+let currentSet = []; // [{idx,it,tr,answer:null|'correct'|'wrong'}]
+let qIndex = 0;      // 0..9 (mevcut gösterilen kart)
+let answered = false;
+
+/** ============== 4) Yardımcı Fonksiyonlar ============== */
+function randomTenIndices(total=WORDS.length){
+  const arr = Array.from({length: total}, (_,i)=>i);
+  for(let i=arr.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+  return arr.slice(0,10);
+}
+function buildSet(){
+  currentSet = randomTenIndices().map(i => ({ idx:i, ...WORDS[i], answer:null }));
+  qIndex = 0;
+  document.getElementById("results").innerHTML = "";
+  document.getElementById("summary").innerHTML = "";
+  showCard();
+  updateProgress();
+}
+function updateProgress(){
+  document.getElementById("qIdx").innerText = Math.min(qIndex+1, 10);
+  document.getElementById("prevBtn").style.display = (qIndex>0) ? "inline-block" : "none";
+}
+function showCard(){
+  const card = document.getElementById("card");
+  const tr = document.getElementById("translation");
+  const nextBtn = document.getElementById("nextBtn");
+  const rememberBtn = document.getElementById("rememberBtn");
+  const notRememberBtn = document.getElementById("notRememberBtn");
+  answered = false;
+
+  if(qIndex >= currentSet.length){ showSetResults(); return; }
+
+  const w = currentSet[qIndex];
+  card.textContent = w.it;
+  tr.textContent = "";
+  nextBtn.style.display = "none";
+  rememberBtn.disabled = false;
+  notRememberBtn.disabled = false;
+
+  // Geri dönüldüğünde önceki durum korunur
+  if(w.answer === "wrong"){ tr.textContent = w.tr; nextBtn.style.display = "inline-block"; }
+  updateProgress();
+}
+function speakCurrent(){
+  if(qIndex >= currentSet.length) return;
+  const w = currentSet[qIndex];
+  const utter = new SpeechSynthesisUtterance(w.it);
+  utter.lang = "it-IT";
+  speechSynthesis.speak(utter);
+}
+
+/** ============== 5) Stats Güncelleme Yardımcıları ============== */
+function adjustStatsForChange(wordIt, prevAnswer, newAnswer){
+  if(prevAnswer === newAnswer) return;
+  const stats = getStats(currentUser);
+  stats[wordIt] = stats[wordIt] || {correct:0, wrong:0};
+  if(prevAnswer === "correct") stats[wordIt].correct = Math.max(0, (stats[wordIt].correct||0)-1);
+  if(prevAnswer === "wrong")   stats[wordIt].wrong   = Math.max(0, (stats[wordIt].wrong||0)-1);
+  if(newAnswer === "correct")  stats[wordIt].correct = (stats[wordIt].correct||0)+1;
+  if(newAnswer === "wrong")    stats[wordIt].wrong   = (stats[wordIt].wrong||0)+1;
+  saveStats(currentUser, stats);
+}
+function setAnswer(answerType){ // 'correct' | 'wrong'
+  if(answered) return;
+  answered = true;
+  const w = currentSet[qIndex];
+  const prev = w.answer;
+
+  if(answerType === "correct"){
+    adjustStatsForChange(w.it, prev, "correct");
+    w.answer = "correct";
+    qIndex++;
+    showCard();
+  } else {
+    document.getElementById("translation").textContent = w.tr;
+    document.getElementById("nextBtn").style.display = "inline-block";
+    adjustStatsForChange(w.it, prev, "wrong");
+    w.answer = "wrong";
+    document.getElementById("rememberBtn").disabled = true;
+    document.getElementById("notRememberBtn").disabled = true;
+  }
+}
+function goNext(){
+  if(qIndex >= currentSet.length) return;
+  qIndex++;
+  showCard();
+}
+
+/** ============== 6) Önceki Kelime ============== */
+function goPrev(){
+  if(qIndex <= 0) return;
+  qIndex--;
+  showCard();
+}
+
+/** ============== 7) Set Sonucu & Genel Başarım ============== */
+function showSetResults(){
+  // Güncel cevaplara göre set özeti
+  const remembered = currentSet.filter(w => w.answer === "correct").map(w => `${w.it} = ${w.tr}`);
+  const notRemembered = currentSet.filter(w => w.answer === "wrong").map(w => `${w.it} = ${w.tr}`);
+
+  const results = document.getElementById("results");
+  let html = `<h3>Bu Setin Özeti</h3>`;
+  html += `<p><span class="tag">Hatırlananlar: ${remembered.length}</span> `;
+  html += `<span class="tag bad">Hatırlanamayanlar: ${notRemembered.length}</span></p>`;
+  html += `<p><strong>Hatırlananlar:</strong> ${remembered.join(", ") || "-"}</p>`;
+  html += `<p><strong>Hatırlanamayanlar:</strong> ${notRemembered.join(", ") || "-"}</p>`;
+  results.innerHTML = html;
+}
+
+function showSummary(){
+  const stats = getStats(currentUser);
+  const rows = [];
+  for(const itWord in stats){
+    const rec = stats[itWord];
+    const tr = (WORDS.find(w=>w.it===itWord)||{}).tr || "";
+    const total = (rec.correct||0)+(rec.wrong||0);
+    if(total>0){
+      const pct = (rec.correct*100/total).toFixed(0);
+      rows.push({it: itWord, tr, correct: rec.correct||0, wrong: rec.wrong||0, total, pct: Number(pct)});
+    }
+  }
+  if(rows.length===0){
+    document.getElementById("summary").innerHTML = `<h3>Başarım</h3><p class="muted">Henüz özetlenecek veri yok. Bir set çözmeye başla.</p>`;
+    return;
+  }
+
+  const best = rows.filter(r => r.correct>0).sort((a,b)=> b.correct - a.correct || b.pct - a.pct || b.total - a.total);
+  const worst = rows.filter(r => r.wrong>0).sort((a,b)=> b.wrong - a.wrong || a.pct - b.pct || b.total - a.total);
+
+  let html = `<h3>Başarım</h3>`;
+  html += `<h4>✅ En Çok Başardıklarım</h4>`;
+  html += best.length? tableHtml(best) : `<p class="muted">Şimdilik burada veri yok.</p>`;
+  html += `<h4>❌ En Çok Zorlandıklarım</h4>`;
+  html += worst.length? tableHtml(worst) : `<p class="muted">Harika! Zorlandığın kelime yok.</p>`;
+  document.getElementById("summary").innerHTML = html;
+}
+function tableHtml(list){
+  let html = `<table><thead><tr>
+    <th>İtalyanca</th><th>Türkçe</th>
+    <th class="right">Hatırlama</th>
+    <th class="right">Hatırlayamama</th>
+    <th class="right">Toplam</th>
+    <th class="right">Başarı %</th>
+  </tr></thead><tbody>`;
+  for(const r of list){
+    html += `<tr>
+      <td>${r.it}</td>
+      <td>${r.tr}</td>
+      <td class="right ok">${r.correct}</td>
+      <td class="right bad">${r.wrong}</td>
+      <td class="right">${r.total}</td>
+      <td class="right">${r.pct}</td>
+    </tr>`;
+  }
+  html += `</tbody></table>`;
+  return html;
+}
+
+/** ============== 8) Dışa Aktar / İçe Aktar ============== */
+function exportAll(){
+  const users = getUsers();
+  const payload = { users, stats: {} };
+  users.forEach(u => { payload.stats[u] = getStats(u); });
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "italyanca_flash_veri.json";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function importFromFile(file){
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      if(!data || !Array.isArray(data.users) || typeof data.stats !== "object"){
+        alert("Geçersiz JSON dosyası.");
+        return;
+      }
+      const existingUsers = getUsers();
+      const mergedUsers = [...existingUsers];
+
+      data.users.forEach(u=>{
+        if(!mergedUsers.includes(u)) mergedUsers.push(u);
+
+        const incomingStats = data.stats[u] || {};
+        const currentStats = getStats(u);
+
+        if(existingUsers.includes(u) && Object.keys(currentStats).length>0 && Object.keys(incomingStats).length>0){
+          const overwrite = confirm(`"${u}" kullanıcısı zaten var. Üzerine yazılsın mı? (Evet = üzerine yaz, Hayır = birleştir)`);
+          if(overwrite){
+            saveStats(u, incomingStats);
+          } else {
+            // Birleştir: sayıları topla
+            const merged = {...currentStats};
+            for(const it in incomingStats){
+              const rec = incomingStats[it]||{};
+              const prev = merged[it]||{correct:0, wrong:0};
+              merged[it] = {
+                correct: (prev.correct||0) + (rec.correct||0),
+                wrong:   (prev.wrong||0)   + (rec.wrong||0)
+              };
+            }
+            saveStats(u, merged);
+          }
+        } else {
+          // Çakışma yoksa / mevcut yoksa: birleştirerek ekle
+          const merged = {...currentStats};
+          for(const it in (incomingStats||{})){
+            const rec = incomingStats[it]||{};
+            const prev = merged[it]||{correct:0, wrong:0};
+            merged[it] = {
+              correct: (prev.correct||0) + (rec.correct||0),
+              wrong:   (prev.wrong||0)   + (rec.wrong||0)
+            };
+          }
+          saveStats(u, merged);
+        }
+      });
+
+      saveUsers(mergedUsers);
+      refreshUserSelect();
+      alert("Veriler içe aktarıldı.");
+    } catch(e){
+      alert("Dosya okunamadı: " + e.message);
+    }
+  };
+  reader.readAsText(file, "UTF-8");
+}
+
+/** ============== 9) Kullanıcı Yönetimi ============== */
+function refreshUserSelect(){
+  const users = getUsers();
+  const sel = document.getElementById("userSelect");
+  sel.innerHTML = "";
+  if(users.length===0){
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Kayıtlı kullanıcı yok";
+    sel.appendChild(opt);
+  } else {
+    users.forEach(u=>{
+      const opt = document.createElement("option");
+      opt.value = u;
+      opt.textContent = u;
+      sel.appendChild(opt);
+    });
+  }
+}
+function enterAs(user){
+  currentUser = user;
+  document.getElementById("currentUser").textContent = currentUser;
+  document.getElementById("login").style.display = "none";
+  document.getElementById("game").style.display = "block";
+  buildSet();
+}
+
+/** ============== 10) Event Listeners ============== */
+document.getElementById("startBtn").addEventListener("click", ()=>{
+  const u = (document.getElementById("username").value||"").trim();
+  const msg = document.getElementById("loginMsg");
+  if(!u){ msg.textContent = "Lütfen bir kullanıcı adı gir."; return; }
+  const users = getUsers();
+  if(users.includes(u)){ msg.textContent = "Bu kullanıcı adı zaten var. Lütfen farklı bir ad deneyin."; return; }
+  users.push(u); saveUsers(users);
+  saveStats(u, getStats(u));
+  enterAs(u);
+});
+document.getElementById("useSelected").addEventListener("click", ()=>{
+  const sel = document.getElementById("userSelect");
+  const v = sel.value;
+  if(!v){ document.getElementById("loginMsg").textContent = "Seçilecek kayıt bulunamadı."; return; }
+  enterAs(v);
+});
+
+document.getElementById("speakBtn").addEventListener("click", speakCurrent);
+document.getElementById("rememberBtn").addEventListener("click", ()=>setAnswer("correct"));
+document.getElementById("notRememberBtn").addEventListener("click", ()=>setAnswer("wrong"));
+document.getElementById("nextBtn").addEventListener("click", goNext);
+document.getElementById("prevBtn").addEventListener("click", goPrev);
+
+document.getElementById("newSetBtn").addEventListener("click", ()=>{
+  document.getElementById("results").innerHTML = "";
+  document.getElementById("summary").innerHTML = "";
+  buildSet();
+});
+document.getElementById("showSummaryBtn").addEventListener("click", showSummary);
+
+// Dışa aktar / içe aktar
+document.getElementById("exportBtn").addEventListener("click", exportAll);
+document.getElementById("importBtn").addEventListener("click", ()=>document.getElementById("importFile").click());
+document.getElementById("importFile").addEventListener("change", (e)=>{
+  const f = e.target.files && e.target.files[0];
+  if(f) importFromFile(f);
+  e.target.value = ""; // aynı dosyayı tekrar seçebilmek için temizle
+});
+
+// İlk yüklemede kullanıcı listesi
+refreshUserSelect();
+</script>
+
+</body>
+</html>
